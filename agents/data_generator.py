@@ -49,6 +49,7 @@ adversarial_data must be a JSON array of objects, not a dict.
 Each object in adversarial_data must have table_name and rows fields.
 rows must be a JSON array of row objects.
 Every row must use only column names that exist in the schema.
+CRITICAL: The adversarial data must use the same primary key values as the clean data provided. Do not invent new IDs. Add problematic rows alongside existing IDs to trigger the failure mode.
 """.strip()
 
 
@@ -57,6 +58,7 @@ def generate_test_case(
     query: str,
     failure_mode: FailureMode,
     schema_analysis: SchemaAnalysis,
+    clean_data: dict[str, list[dict]] = None,
 ) -> AdversarialTestCase:
     """
     Given a schema, query, and target failure mode, generates one
@@ -90,6 +92,10 @@ Columns flagged for this failure mode:
 Generate one adversarial test case targeting the {failure_mode.value} failure mode.
 Use the flagged columns above to construct data that specifically triggers this failure.
 """.strip()
+
+    if clean_data:
+        clean_sample = json.dumps({table: rows[:3] for table, rows in clean_data.items()}, indent=2)
+        user_message += f"\n\nClean data reference (use these exact same IDs in your adversarial dataset):\n{clean_sample}"
 
     response = client.chat.completions.create(
         model="gpt-4o",
