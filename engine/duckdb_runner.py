@@ -1,6 +1,4 @@
 import duckdb
-from typing import Any
-
 
 class DuckDBRunner:
     """
@@ -42,9 +40,9 @@ class DuckDBRunner:
         Run a SQL query and return results as a list of dicts.
         Returns an empty list if the query produces no rows.
         """
-        result = self.conn.execute(sql).fetchdf()
-        # Convert to list of plain dicts, handling numpy types
-        return result.to_dict(orient="records")
+        cursor = self.conn.execute(sql)
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def load_and_run(
         self,

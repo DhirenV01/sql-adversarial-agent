@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(cat | python3 -c \"import sys,json; ti=json.load(sys.stdin).get('tool_input',{}); print(ti.get('file_path',ti.get('path','')))\" 2>/dev/null); [ -z \"$FILE\" ] || ! echo \"$FILE\" | grep -qE '\\.py$' || ! [ -f \"$FILE\" ] && exit 0; ruff check \"$FILE\" 2>&1 || { echo \"ruff errors above\" >&2; exit 2; }",
+            "statusMessage": "Linting..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "COMMAND=$(cat | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))\"); echo \"$COMMAND\" | grep -qE 'rm\\s+-rf\\s+/|git\\s+push\\s+--force|DROP\\s+TABLE' && { echo 'Blocked dangerous command' >&2; exit 2; } || exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -m pytest tests/ -x --tb=short -q 2>&1 || { echo 'Tests must pass before completing' >&2; exit 2; }",
+            "statusMessage": "Running tests..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m pytest tests/ -x --tb=short -q 2>&1)"
+    ]
+  }
+}
