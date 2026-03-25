@@ -28,6 +28,8 @@ The failure modes you must reason about are:
 - scd_type2_overlap: point-in-time query errors from slowly changing dimension overlaps
 - division_by_zero: calculated fields where the denominator can be zero or NULL
 
+IMPORTANT: When the schema contains multiple tables or the query involves JOINs, you MUST recommend at least 3 failure modes. Multi-table schemas inherently expose more vulnerability surfaces (fanout, NULL propagation, grain mismatches), so fewer than 3 recommendations would be insufficient coverage.
+
 Return ONLY valid JSON. No preamble, no markdown, no explanation.
 
 IMPORTANT: "tables" must be a JSON array of objects, not a dict keyed by table name.

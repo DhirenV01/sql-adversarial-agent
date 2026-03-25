@@ -49,7 +49,12 @@ adversarial_data must be a JSON array of objects, not a dict.
 Each object in adversarial_data must have table_name and rows fields.
 rows must be a JSON array of row objects.
 Every row must use only column names that exist in the schema.
-CRITICAL: The adversarial data must use the same primary key values as the clean data provided. Do not invent new IDs. Add problematic rows alongside existing IDs to trigger the failure mode.
+CRITICAL CONSTRAINT — PRIMARY KEY REUSE:
+- You MUST only use primary key values that already exist in the clean_data provided.
+- NEVER invent, increment, or fabricate new primary key values (e.g., if clean_data has IDs 1, 2, 3 you must NOT use ID 4 or any other new value).
+- Adversarial rows should duplicate or reference existing primary key values to create the targeted failure (e.g., duplicate rows with the same ID, or foreign keys pointing to existing IDs).
+- If you generate any primary key value not present in the clean_data, the test case is INVALID.
+- This rule applies to ALL columns that serve as primary keys or foreign keys across all tables.
 """.strip()
 
 
