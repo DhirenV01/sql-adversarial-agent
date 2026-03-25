@@ -92,7 +92,7 @@ def test_explanation_is_populated():
     assert result.delta_summary is not None
     assert len(result.delta_summary) > 0
 
-def test_duplicate_rows_causes_faioure():
+def test_duplicate_rows_causes_failure():
     schema_analysis = analyze_schema(ORDERS_DDL)
     test_case = generate_test_case(
         ddl=ORDERS_DDL,
