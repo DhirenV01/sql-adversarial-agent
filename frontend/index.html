@@ -382,14 +382,14 @@
     <div class="form-group">
       <label>DDL / Schema <span class="hint">CREATE TABLE statements</span></label>
       <textarea id="ddl" class="tall" spellcheck="false">CREATE TABLE orders (
-  order_id INTEGER PRIMARY KEY,
+  order_id INTEGER,
   customer_id INTEGER,
   amount DECIMAL(10,2),
   order_date DATE
 );
 
 CREATE TABLE customers (
-  customer_id INTEGER PRIMARY KEY,
+  customer_id INTEGER,
   name VARCHAR,
   segment VARCHAR
 );</textarea>
