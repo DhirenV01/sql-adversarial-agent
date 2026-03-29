@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Adversarial Testing Agent</title>
+<style>
+  :root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #111111;
+    --bg-tertiary: #1a1a1a;
+    --bg-input: #0d0d0d;
+    --border: #2a2a2a;
+    --border-focus: #d4a017;
+    --text-primary: #e0e0e0;
+    --text-secondary: #888888;
+    --text-muted: #555555;
+    --amber: #d4a017;
+    --amber-dim: #a07d12;
+    --amber-glow: rgba(212, 160, 23, 0.15);
+    --green: #3ddc84;
+    --green-dim: rgba(61, 220, 132, 0.12);
+    --red: #ef5350;
+    --red-dim: rgba(239, 83, 80, 0.12);
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  /* Header */
+  header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--amber);
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+  }
+
+  header p {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* Form */
+  .form-group {
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  label .hint {
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+
+  textarea {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    resize: vertical;
+    transition: border-color 0.15s;
+    tab-size: 2;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 1px var(--amber-glow);
+  }
+
+  textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  textarea.tall { min-height: 140px; }
+  textarea.short { min-height: 100px; }
+
+  /* Submit */
+  .submit-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  button#submit-btn {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bg-primary);
+    background: var(--amber);
+    border: none;
+    border-radius: 4px;
+    padding: 10px 24px;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    letter-spacing: 0.02em;
+  }
+
+  button#submit-btn:hover:not(:disabled) {
+    background: #e0ad1a;
+  }
+
+  button#submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Loading */
+  .loading-indicator {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .loading-indicator.visible {
+    display: flex;
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--amber);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .elapsed {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Error */
+  .error-box {
+    display: none;
+    background: var(--red-dim);
+    border: 1px solid rgba(239, 83, 80, 0.3);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--red);
+  }
+
+  .error-box.visible { display: block; }
+
+  /* Results */
+  #results {
+    display: none;
+  }
+
+  #results.visible { display: block; }
+
+  .results-header {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .results-header h2 {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .stat {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .stat .num { font-weight: 700; }
+  .stat .num.pass { color: var(--green); }
+  .stat .num.fail { color: var(--red); }
+
+  .schema-summary {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 16px 0 24px;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    border-left: 3px solid var(--amber-dim);
+    line-height: 1.6;
+  }
+
+  /* Test cards */
+  .test-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .test-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+  }
+
+  .test-card-header:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .status-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .status-badge.pass {
+    color: var(--green);
+    background: var(--green-dim);
+  }
+
+  .status-badge.fail {
+    color: var(--red);
+    background: var(--red-dim);
+  }
+
+  .test-card-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .failure-mode-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .chevron {
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+
+  .test-card.expanded .chevron {
+    transform: rotate(90deg);
+  }
+
+  .test-card-body {
+    display: none;
+    padding: 0 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .test-card.expanded .test-card-body {
+    display: block;
+  }
+
+  .detail-section {
+    margin-top: 14px;
+  }
+
+  .detail-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .detail-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .detail-text.explanation {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--amber-dim);
+  }
+
+  .delta-summary {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--red);
+    background: var(--red-dim);
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+
+  .delta-summary.pass-delta {
+    color: var(--green);
+    background: var(--green-dim);
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>sql-adversarial-agent</h1>
+    <p>Stress-test SQL queries with auto-generated adversarial datasets. Surfaces logic errors, not syntax errors.</p>
+  </header>
+
+  <form id="analyze-form" autocomplete="off">
+    <div class="form-group">
+      <label>DDL / Schema <span class="hint">CREATE TABLE statements</span></label>
+      <textarea id="ddl" class="tall" spellcheck="false">CREATE TABLE orders (
+  order_id INTEGER PRIMARY KEY,
+  customer_id INTEGER,
+  amount DECIMAL(10,2),
+  order_date DATE
+);
+
+CREATE TABLE customers (
+  customer_id INTEGER PRIMARY KEY,
+  name VARCHAR,
+  segment VARCHAR
+);</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>SQL Query <span class="hint">The query to stress-test</span></label>
+      <textarea id="query" class="short" spellcheck="false">SELECT c.segment, SUM(o.amount) AS total_revenue
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+GROUP BY c.segment;</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Clean Data <span class="hint">JSON: {"table_name": [rows...]}</span></label>
+      <textarea id="clean-data" class="tall" spellcheck="false">{
+  "orders": [
+    {"order_id": 1, "customer_id": 1, "amount": 100.00, "order_date": "2024-01-15"},
+    {"order_id": 2, "customer_id": 2, "amount": 250.00, "order_date": "2024-02-20"}
+  ],
+  "customers": [
+    {"customer_id": 1, "name": "Alice", "segment": "enterprise"},
+    {"customer_id": 2, "name": "Bob", "segment": "smb"}
+  ]
+}</textarea>
+    </div>
+
+    <div class="submit-row">
+      <button type="submit" id="submit-btn">Run Analysis</button>
+      <div class="loading-indicator" id="loading">
+        <div class="spinner"></div>
+        <span>Running adversarial tests...</span>
+        <span class="elapsed" id="elapsed"></span>
+      </div>
+    </div>
+  </form>
+
+  <div class="error-box" id="error"></div>
+
+  <section id="results">
+    <div class="results-header">
+      <h2>Results</h2>
+      <span class="stat"><span class="num" id="total-count">0</span> tests</span>
+      <span class="stat"><span class="num pass" id="pass-count">0</span> passed</span>
+      <span class="stat"><span class="num fail" id="fail-count">0</span> failed</span>
+    </div>
+    <div class="schema-summary" id="schema-summary"></div>
+    <div id="test-cards"></div>
+  </section>
+
+  <footer>sql-adversarial-agent v0.1.0</footer>
+</div>
+
+<script>
+const form = document.getElementById('analyze-form');
+const submitBtn = document.getElementById('submit-btn');
+const loading = document.getElementById('loading');
+const elapsedEl = document.getElementById('elapsed');
+const errorBox = document.getElementById('error');
+const resultsSection = document.getElementById('results');
+const testCardsContainer = document.getElementById('test-cards');
+
+let timer = null;
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function startTimer() {
+  let seconds = 0;
+  elapsedEl.textContent = '0s';
+  timer = setInterval(() => {
+    seconds++;
+    elapsedEl.textContent = formatElapsed(seconds);
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.classList.add('visible');
+}
+
+function hideError() {
+  errorBox.classList.remove('visible');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderResults(report) {
+  document.getElementById('total-count').textContent = report.total_tests;
+  document.getElementById('pass-count').textContent = report.passed;
+  document.getElementById('fail-count').textContent = report.failed;
+  document.getElementById('schema-summary').textContent = report.schema_summary;
+
+  testCardsContainer.innerHTML = '';
+
+  report.results.forEach((r, i) => {
+    const passed = r.passed;
+    const card = document.createElement('div');
+    card.className = 'test-card';
+
+    card.innerHTML = `
+      <div class="test-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="status-badge ${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+        <span class="test-card-title">${escapeHtml(r.test_name)}</span>
+        <span class="failure-mode-tag">${escapeHtml(r.failure_mode)}</span>
+        <span class="chevron">&#9654;</span>
+      </div>
+      <div class="test-card-body">
+        <div class="detail-section">
+          <div class="detail-label">Delta Summary</div>
+          <div class="delta-summary ${passed ? 'pass-delta' : ''}">${escapeHtml(r.delta_summary)}</div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Explanation</div>
+          <div class="detail-text explanation">${escapeHtml(r.explanation)}</div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Adversarial Description</div>
+          <div class="detail-text">${escapeHtml(r.adversarial_description)}</div>
+        </div>
+      </div>
+    `;
+
+    testCardsContainer.appendChild(card);
+
+    // Auto-expand failed tests
+    if (!passed) {
+      card.classList.add('expanded');
+    }
+  });
+
+  resultsSection.classList.add('visible');
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideError();
+  resultsSection.classList.remove('visible');
+
+  const ddl = document.getElementById('ddl').value.trim();
+  const query = document.getElementById('query').value.trim();
+  const cleanDataRaw = document.getElementById('clean-data').value.trim();
+
+  if (!ddl || !query || !cleanDataRaw) {
+    showError('All fields are required.');
+    return;
+  }
+
+  let cleanData;
+  try {
+    cleanData = JSON.parse(cleanDataRaw);
+  } catch {
+    showError('Clean data must be valid JSON.');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  loading.classList.add('visible');
+  startTimer();
+
+  try {
+    const resp = await fetch('http://localhost:8000/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ddl, query, clean_data: cleanData }),
+    });
+
+    if (!resp.ok) {
+      let detail = `Request failed (${resp.status})`;
+      try {
+        const err = await resp.json();
+        if (err.detail) {
+          detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+        }
+      } catch {}
+      throw new Error(detail);
+    }
+
+    const report = await resp.json();
+    renderResults(report);
+  } catch (err) {
+    showError(err.message || 'An unexpected error occurred.');
+  } finally {
+    stopTimer();
+    loading.classList.remove('visible');
+    submitBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
