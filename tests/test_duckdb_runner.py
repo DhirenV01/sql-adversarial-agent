@@ -1,5 +1,5 @@
 import pytest
-from engine.duckdb_runner import DuckDBRunner
+from engine.duckdb_runner import DuckDBRunner, _quote_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +36,33 @@ def runner():
     r = DuckDBRunner()
     yield r
     r.close()
+
+
+# ---------------------------------------------------------------------------
+# Context manager protocol
+# ---------------------------------------------------------------------------
+
+def test_context_manager_closes_connection():
+    with DuckDBRunner() as runner:
+        runner.setup_schema("CREATE TABLE t (id INTEGER)")
+        runner.insert_rows("t", [{"id": 1}])
+        result = runner.run_query("SELECT * FROM t")
+        assert len(result) == 1
+
+    # Connection should be closed after exiting context
+    with pytest.raises(Exception):
+        runner.run_query("SELECT 1")
+
+
+def test_context_manager_closes_on_error():
+    """Connection is cleaned up even when an exception occurs inside the block."""
+    with pytest.raises(ZeroDivisionError):
+        with DuckDBRunner() as runner:
+            runner.setup_schema("CREATE TABLE t (id INTEGER)")
+            raise ZeroDivisionError("boom")
+
+    with pytest.raises(Exception):
+        runner.run_query("SELECT 1")
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +170,10 @@ def test_null_propagation_left_join(runner):
     """
     left_result = runner.run_query(left_join_query)
     assert len(left_result) == 3
+    # Verify the unmatched row has NULL for name
+    unmatched = [r for r in left_result if r["order_id"] == 3]
+    assert len(unmatched) == 1
+    assert unmatched[0]["name"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -181,3 +212,52 @@ def test_reset_clears_state(runner):
     # After reset, table should not exist
     with pytest.raises(Exception):
         runner.run_query("SELECT * FROM orders")
+
+
+# ---------------------------------------------------------------------------
+# SQL injection prevention
+# ---------------------------------------------------------------------------
+
+class TestSQLInjectionPrevention:
+    """Verify that identifier quoting blocks SQL injection via table/column names."""
+
+    def test_rejects_table_name_with_semicolon(self, runner):
+        runner.setup_schema("CREATE TABLE safe_table (id INTEGER)")
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            runner.insert_rows("safe_table; DROP TABLE safe_table; --", [{"id": 1}])
+
+    def test_rejects_table_name_with_parentheses(self, runner):
+        runner.setup_schema("CREATE TABLE safe_table (id INTEGER)")
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            runner.insert_rows("safe_table (id) VALUES (1)); --", [{"id": 1}])
+
+    def test_rejects_column_name_with_injection(self, runner):
+        runner.setup_schema("CREATE TABLE safe_table (id INTEGER)")
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            runner.insert_rows("safe_table", [{"id); DROP TABLE safe_table; --": 1}])
+
+    def test_rejects_table_name_starting_with_digit(self):
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            _quote_identifier("1drop_table")
+
+    def test_rejects_empty_identifier(self):
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            _quote_identifier("")
+
+    def test_accepts_valid_identifiers(self):
+        assert _quote_identifier("orders") == '"orders"'
+        assert _quote_identifier("_private") == '"_private"'
+        assert _quote_identifier("table_2") == '"table_2"'
+        assert _quote_identifier("CamelCase") == '"CamelCase"'
+
+    def test_table_survives_after_injection_attempt(self, runner):
+        """The table still has its data after a failed injection attempt."""
+        runner.setup_schema("CREATE TABLE safe_table (id INTEGER)")
+        runner.insert_rows("safe_table", [{"id": 1}, {"id": 2}])
+
+        with pytest.raises(ValueError):
+            runner.insert_rows("safe_table; DROP TABLE safe_table; --", [{"id": 3}])
+
+        # Table should still exist and have original data
+        result = runner.run_query("SELECT COUNT(*) AS n FROM safe_table")
+        assert result[0]["n"] == 2

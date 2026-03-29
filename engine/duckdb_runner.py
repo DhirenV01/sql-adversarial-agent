@@ -1,13 +1,40 @@
+import re
 import duckdb
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _quote_identifier(name: str) -> str:
+    """
+    Validate and quote a SQL identifier to prevent injection.
+    Rejects anything that isn't a simple alphanumeric/underscore name,
+    then double-quotes it for safe interpolation.
+    """
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return f'"{name}"'
+
 
 class DuckDBRunner:
     """
     Executes SQL queries against an in-memory DuckDB instance.
     Each runner instance is isolated — create a new one per test run.
+
+    Supports context manager protocol for automatic cleanup:
+        with DuckDBRunner() as runner:
+            runner.setup_schema(ddl)
+            ...
     """
 
     def __init__(self):
         self.conn = duckdb.connect(database=":memory:")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def setup_schema(self, ddl: str) -> None:
         """
@@ -21,15 +48,18 @@ class DuckDBRunner:
     def insert_rows(self, table_name: str, rows: list[dict]) -> None:
         """
         Insert a list of row dicts into a table.
-        All rows must have the same keys.
+        All rows must have the same keys. Table and column names are
+        validated and quoted to prevent SQL injection.
         """
         if not rows:
             return
 
+        safe_table = _quote_identifier(table_name)
         columns = list(rows[0].keys())
-        col_str = ", ".join(columns)
+        safe_columns = [_quote_identifier(c) for c in columns]
+        col_str = ", ".join(safe_columns)
         placeholders = ", ".join(["?" for _ in columns])
-        sql = f"INSERT INTO {table_name} ({col_str}) VALUES ({placeholders})"
+        sql = f"INSERT INTO {safe_table} ({col_str}) VALUES ({placeholders})"
 
         for row in rows:
             values = [row[col] for col in columns]
