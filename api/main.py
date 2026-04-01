@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
 from agents.schema_analyzer import analyze_schema
@@ -21,6 +22,13 @@ app = FastAPI(
     title="SQL Adversarial Testing Agent",
     description="Stress-tests SQL queries by generating adversarial data to surface logic errors",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -68,9 +76,15 @@ class AnalyzeRequest(BaseModel):
 def health():
     return {"status": "ok"}
 
+DANGEROUS_KEYWORDS = ["ATTACH", "COPY", "EXPORT", "IMPORT", "INSTALL", "LOAD"]
 
 @app.post("/analyze", response_model=AnalysisReport)
 def analyze(request: AnalyzeRequest):
+    upper_query = request.query.upper()
+    for keyword in DANGEROUS_KEYWORDS:
+        if keyword in upper_query:
+            raise HTTPException(status_code=400, detail=f"Query contains disallowed keyword: {keyword}")
+
     try:
         # Agent 1: analyze the schema
         schema_analysis = analyze_schema(request.ddl)
