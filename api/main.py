@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
@@ -30,6 +30,15 @@ app.add_middleware(
     allow_methods=["POST"],
     allow_headers=["Content-Type"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 
 
 class AnalyzeRequest(BaseModel):
@@ -86,11 +95,8 @@ def analyze(request: AnalyzeRequest):
             raise HTTPException(status_code=400, detail=f"Query contains disallowed keyword: {keyword}")
 
     try:
-        # Agent 1: analyze the schema
         schema_analysis = analyze_schema(request.ddl)
 
-        # Agent 2 + 3: for each recommended failure mode,
-        # generate adversarial data and validate
         results = []
         for failure_mode in schema_analysis.recommended_failure_modes:
             test_case = generate_test_case(
@@ -108,7 +114,6 @@ def analyze(request: AnalyzeRequest):
             )
             results.append(result)
 
-        # build the final report
         passed = sum(1 for r in results if r.passed)
         failed = len(results) - passed
 
